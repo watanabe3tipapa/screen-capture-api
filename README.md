@@ -26,7 +26,6 @@ HTMLファイル1つで完結しており、サーバーへのデータ送信は
 
 1.  **ファイルを開く**:
     `index.html` をモダンブラウザ（Chrome, Edge, Firefoxなど）で開きます。
-    （GitHub Pagesで公開している場合は、そのURLにアクセスするだけです）
 
 2.  **キャプチャ開始**:
     「画面キャプチャ開始」ボタンをクリックし、共有・録画したい画面やウィンドウを選択します。
@@ -47,5 +46,9 @@ HTMLファイル1つで完結しており、サーバーへのデータ送信は
 - Microsoft Edge
 - Mozilla Firefox
 - その他、Screen Capture API と MediaRecorder API をサポートするブラウザ
+
+## ライセンス
+
+本ソフトウェアは [MIT License](LICENSE) の下で公開しています。
 
 ---
