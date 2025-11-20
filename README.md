@@ -47,6 +47,15 @@ HTMLファイル1つで完結しており、サーバーへのデータ送信は
 - Mozilla Firefox
 - その他、Screen Capture API と MediaRecorder API をサポートするブラウザ
 
+## 保存先
+
+ブラウザのダウンロードフォルダに保存されます。
+
+## デモ
+
+[デモ](https://watanabe3tipapa.github.io/screen-capture-api/)
+
+
 ## ライセンス
 
 本ソフトウェアは [MIT License](LICENSE) の下で公開しています。
