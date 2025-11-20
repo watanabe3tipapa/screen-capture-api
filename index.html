@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Screen Capture + Recording</title>
+  <style>
+    body {
+      background: #0f1724;
+      color: #e6eef6;
+      font-family: sans-serif;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh
+    }
+
+    h1 {
+      margin-bottom: 20px;
+      text-align: center
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 20px
+    }
+
+    button {
+      padding: 10px 16px;
+      border: 0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed
+    }
+
+    button.primary {
+      background: #06b6d4;
+      color: #042023
+    }
+
+    button.primary:hover:not(:disabled) {
+      background: #0891b2
+    }
+
+    button.secondary {
+      background: transparent;
+      color: #06b6d4;
+      border: 1px solid #06b6d4
+    }
+
+    button.secondary:hover:not(:disabled) {
+      background: rgba(6, 182, 212, 0.1)
+    }
+
+    button.danger {
+      background: transparent;
+      color: #ef4444;
+      border: 1px solid #ef4444
+    }
+
+    button.danger:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.1)
+    }
+
+    video {
+      width: 100%;
+      max-width: 800px;
+      background: #000;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)
+    }
+
+    .status {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 6px;
+      display: none;
+      width: 100%;
+      max-width: 800px;
+      text-align: center
+    }
+
+    .status.error {
+      background: rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+      border: 1px solid #ef4444
+    }
+
+    .status.info {
+      background: rgba(6, 182, 212, 0.2);
+      color: #67e8f9;
+      border: 1px solid #06b6d4
+    }
+
+    .timer {
+      font-family: monospace;
+      font-size: 1.5rem;
+      margin: 10px 0;
+      color: #06b6d4
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Screen Capture API + 録画機能</h1>
+  <div class="controls">
+    <button id="startCapture" class="primary">画面キャプチャ開始</button>
+    <button id="stopCapture" class="secondary" disabled>キャプチャ停止</button>
+    <button id="startRecord" class="primary" disabled>録画開始</button>
+    <button id="stopRecord" class="secondary" disabled>録画停止</button>
+    <button id="downloadVideo" class="secondary" disabled>録画を保存</button>
+    <button id="clear" class="danger" disabled>クリア</button>
+  </div>
+  <div id="timer" class="timer">00:00:00</div>
+  <div id="status" class="status"></div>
+  <video id="preview" autoplay playsinline controls></video>
+
+  <script>
+    let stream = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let timerInterval = null;
+    let startTime = 0;
+
+    const startCaptureBtn = document.getElementById('startCapture');
+    const stopCaptureBtn = document.getElementById('stopCapture');
+    const startRecordBtn = document.getElementById('startRecord');
+    const stopRecordBtn = document.getElementById('stopRecord');
+    const downloadVideoBtn = document.getElementById('downloadVideo');
+    const clearBtn = document.getElementById('clear');
+    const preview = document.getElementById('preview');
+    const statusDiv = document.getElementById('status');
+    const timerDiv = document.getElementById('timer');
+
+    function showMessage(msg, type = 'info') {
+      statusDiv.textContent = msg;
+      statusDiv.className = 'status ' + type;
+      statusDiv.style.display = 'block';
+      setTimeout(() => {
+        statusDiv.style.display = 'none';
+      }, 5000);
+    }
+
+    function updateTimer() {
+      const now = Date.now();
+      const diff = now - startTime;
+      const date = new Date(diff);
+      const h = String(date.getUTCHours()).padStart(2, '0');
+      const m = String(date.getUTCMinutes()).padStart(2, '0');
+      const s = String(date.getUTCSeconds()).padStart(2, '0');
+      timerDiv.textContent = `${h}:${m}:${s}`;
+    }
+
+    function getSupportedMimeType() {
+      const types = [
+        'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8',
+        'video/webm;codecs=h264',
+        'video/webm',
+        'video/mp4'
+      ];
+      for (const type of types) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          return type;
+        }
+      }
+      return '';
+    }
+
+    async function startCapture() {
+      try {
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { cursor: "always" },
+          audio: true
+        });
+        preview.srcObject = stream;
+
+        // Handle stream ending (e.g. user clicks "Stop sharing" in browser UI)
+        stream.getVideoTracks()[0].onended = () => {
+          stopCapture();
+        };
+
+        startRecordBtn.disabled = false;
+        stopCaptureBtn.disabled = false;
+        startCaptureBtn.disabled = true;
+        clearBtn.disabled = false;
+        showMessage('画面キャプチャを開始しました');
+      } catch (err) {
+        console.error(err);
+        showMessage('画面キャプチャに失敗しました: ' + err.message, 'error');
+      }
+    }
+
+    function stopCapture() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+      preview.srcObject = null;
+
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        stopRecording();
+      }
+
+      startRecordBtn.disabled = true;
+      stopRecordBtn.disabled = true;
+      stopCaptureBtn.disabled = true;
+      startCaptureBtn.disabled = false;
+      // Keep download/clear enabled if we have data
+      if (recordedChunks.length === 0) {
+        clearBtn.disabled = true;
+      }
+      showMessage('キャプチャを停止しました');
+    }
+
+    function startRecording() {
+      if (!stream) return;
+      recordedChunks = [];
+      const mimeType = getSupportedMimeType();
+      if (!mimeType) {
+        showMessage('サポートされている録画形式が見つかりません', 'error');
+        return;
+      }
+
+      try {
+        mediaRecorder = new MediaRecorder(stream, { mimeType });
+      } catch (e) {
+        console.error(e);
+        showMessage('MediaRecorderの作成に失敗しました: ' + e.message, 'error');
+        return;
+      }
+
+      mediaRecorder.ondataavailable = e => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        downloadVideoBtn.disabled = false;
+        clearBtn.disabled = false;
+        showMessage('録画が完了しました。保存できます。');
+      };
+
+      mediaRecorder.start();
+      startTime = Date.now();
+      timerInterval = setInterval(updateTimer, 1000);
+
+      startRecordBtn.disabled = true;
+      stopRecordBtn.disabled = false;
+      downloadVideoBtn.disabled = true;
+      showMessage('録画を開始しました');
+    }
+
+    function stopRecording() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+      clearInterval(timerInterval);
+      startRecordBtn.disabled = false;
+      stopRecordBtn.disabled = true;
+    }
+
+    function downloadRecording() {
+      if (recordedChunks.length === 0) return;
+      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `screen-recording-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.webm`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showMessage('録画ファイルを保存しました');
+    }
+
+    function clearAll() {
+      if (confirm('録画データとプレビューをクリアしますか？')) {
+        stopCapture();
+        recordedChunks = [];
+        preview.srcObject = null;
+        downloadVideoBtn.disabled = true;
+        clearBtn.disabled = true;
+        timerDiv.textContent = '00:00:00';
+        showMessage('クリアしました');
+      }
+    }
+
+    startCaptureBtn.onclick = startCapture;
+    stopCaptureBtn.onclick = stopCapture;
+    startRecordBtn.onclick = startRecording;
+    stopRecordBtn.onclick = stopRecording;
+    downloadVideoBtn.onclick = downloadRecording;
+    clearBtn.onclick = clearAll;
+  </script>
+</body>
+
+</html>
